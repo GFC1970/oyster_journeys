@@ -1,0 +1,128 @@
+---
+title: "TfL Oyster Card Analysis"
+author: "Graham Cox"
+date: "30th May 2022"
+output:
+  html_document: 
+    highlight: espresso
+  html_notebook:
+    toc: yes
+    highlight: espresso
+    theme: cerulean
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# Load libraries 
+library(tidyverse)
+library(lubridate)
+library(showtext)
+library(ggtext)
+library(tidytext)
+
+# Set up fonts 
+
+font_add_google(family = "patua-one", "Patua One")
+font_add_google(family = "roboto-condensed", "Roboto Condensed")
+
+showtext_auto()
+
+# Set main plot theme
+
+theme_set(theme_minimal(base_family = "roboto-condensed") +
+            theme(
+              plot.title = element_text(family = "patua-one",
+                                        size = 22),
+              plot.title.position = "plot",
+              panel.grid = element_blank()
+            ))
+
+```
+## A 5% Sample of Oyster Card Journeys on the London Transport Network during 1 week in November 2009.
+
+### Introduction
+
+In this notebook I will analyse a dataset that contains information from TFL Oyster Card journeys. The Oyster card is a contactless payment method and was first introduced in London in June 2003. The card can contain pre-paid tickets for a period of time, travel permits and pre-paid credit for travel, commonly known as Pay-As-You-Go, or PAYG.
+
+The card allows for several on the variety of transport modes available to passengers
+
+- London Underground
+- London Buses
+- Nation Rail Overground Network
+- Docklands Light Railway
+- London Tramlink
+
+The Oyster card can also be used on the Emirates Skyline cable car and on certain river boat services. **Data for journeys on these transport modes is not included in this dataset.**
+
+### Questions
+
+1. Does the definition of "rush hour" of the majority of journeys being made between 08:00 and 09:00 and 17:00 and 18:00 hold true with this dataset?
+2. What are the busiest locations?
+3. What are the top 5 busiest locations within each London Underground Zones 1-9?
+4. What are the busiest times of day for each type of Oyster Card?
+5. What is the average amount spent for journeys during the rush hour?
+
+### Load Data and Initial Wrangling
+
+```{r data-load}
+
+# Initial load of data
+
+df <- read_csv("../data/Nov09JnyExport.csv",
+               show_col_types = FALSE)
+
+# View dataset
+
+glimpse(df)
+
+```
+
+Let's clean up the variable names using the `janitor` package.
+
+```{r data-clean-1}
+
+df <- df %>% 
+  janitor::clean_names()
+
+glimpse(df)
+```
+
+#### Variable Review
+
+Reviewing the variables available in the dataset, the following assumptions are made
+
+- Where `start_stn` equals "Unstarted" or `end_station` equals "Unfinished" these are journeys where the passenger failed to tap-in or tap-out with an Oyster Card at the start or end of their journeys. These observations also have a value of 00:00:00 in either the `ent_time_hhmm` or `ex_time_hhmm` variables. **These observations will be removed**
+- The `ZVPPT` variable does not contain meaningful information. **This variable will be removed**
+- The `ent_time` and `ex_time` variables do not hold meaningful information. **These variables will be removed**
+
+
+```{r}
+df <- df %>% 
+  select(-c(ent_time, ex_time, zvppt)) %>% 
+  filter(!if_any(start_stn:end_station, ~ .x %in% c("Unstarted", "Unfinished")))
+```
+---  
+  
+#### Review of the `sub_system` variable
+  
+```{r}
+df %>% select(sub_system) %>% group_by(sub_system) %>%
+  ggplot(aes(sub_system)) +
+  geom_bar() +
+  coord_flip()
+```
+
+- The highest number of observations are for those journeys on LTB. These observations have a `start_stn` and `end_station` of "BUS". These observations also have an ex_time_hhmm of "00:00:00". As passengers are not required to tap-out at the end of the journey, an end time cannot be recorded. **These observations will be removed**
+- The remaining `sub_systems` have a considerably lower number of observations compared to the new highest group of "LUL" i.e. London Underground. **All other `sub_system` values will now be removed**
+- As the variable named `sub_system` now only contains one value of "LUL". **This variable can now be removed**
+- The variable named `route_id` was for bus journeys only. **This variable can now be removed**
+
+```{r}
+final_df <- df %>% 
+  filter(sub_system == "LUL") %>% 
+  select(-c(sub_system, route_id))
+
+glimpse(final_df)
+
+```
